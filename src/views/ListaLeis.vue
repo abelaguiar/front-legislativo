@@ -11,16 +11,24 @@ const loading = ref(false)
 const erro = ref(null)
 
 const busca = ref('')
-const ano = ref('')
+const ano = ref(null)
+const mes = ref(null)
+const dia = ref(null)
+const numero = ref(null)
 const pagina = ref(1)
+
+let debounceTimer = null
 
 async function carregar() {
   loading.value = true
   erro.value = null
   try {
     const params = { page: pagina.value }
-    if (busca.value) params.search = busca.value
-    if (ano.value) params.ano = ano.value
+    if (busca.value.trim()) params['filter[busca]'] = busca.value.trim()
+    if (numero.value !== null && numero.value !== '') params['filter[numero]'] = numero.value
+    if (ano.value !== null && ano.value !== '') params['filter[ano]'] = ano.value
+    if (mes.value !== null && mes.value !== '') params['filter[mes]'] = mes.value
+    if (dia.value !== null && dia.value !== '') params['filter[dia]'] = dia.value
     const data = await api.leis.listar(params)
     leis.value = data.data
     meta.value = data.meta ?? null
@@ -31,10 +39,15 @@ async function carregar() {
   }
 }
 
-watch([busca, ano], () => {
-  pagina.value = 1
-  carregar()
-})
+function agendarBusca() {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    pagina.value = 1
+    carregar()
+  }, 500)
+}
+
+watch([busca, numero, ano, mes, dia], agendarBusca)
 
 watch(pagina, carregar)
 
@@ -67,20 +80,41 @@ function formatarData(data) {
       <h2 class="text-2xl font-bold text-gray-800 mb-6">Legislação Estadual</h2>
 
       <!-- Filtros -->
-      <div class="flex flex-col sm:flex-row gap-3 mb-6">
-        <input
-          v-model="busca"
-          type="search"
-          placeholder="Buscar por ementa..."
-          class="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-        />
-        <input
-          v-model="ano"
-          type="number"
-          placeholder="Ano (ex: 2024)"
-          min="2000" max="2099"
-          class="w-40 rounded-lg border border-gray-300 px-4 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-        />
+      <div class="flex flex-col gap-3 mb-6">
+        <div class="flex flex-col sm:flex-row gap-3">
+          <input
+            v-model="busca"
+            type="search"
+            placeholder="Buscar por ementa..."
+            class="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+          />
+          <input
+            v-model.number="numero"
+            type="number"
+            placeholder="Nº da lei"
+            class="w-36 rounded-lg border border-gray-300 px-4 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+          />
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <input
+            v-model.number="dia"
+            type="number"
+            placeholder="Dia"
+            class="w-28 rounded-lg border border-gray-300 px-4 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+          />
+          <input
+            v-model.number="mes"
+            type="number"
+            placeholder="Mês"
+            class="w-28 rounded-lg border border-gray-300 px-4 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+          />
+          <input
+            v-model.number="ano"
+            type="number"
+            placeholder="Ano (ex: 2024)"
+            class="w-40 rounded-lg border border-gray-300 px-4 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+          />
+        </div>
       </div>
 
       <!-- Estado de carregamento/erro -->

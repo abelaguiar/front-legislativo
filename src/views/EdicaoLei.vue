@@ -1,7 +1,9 @@
 <script setup>
-import { ref, reactive, onMounted, nextTick } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../services/api.js'
+import EditorTexto from '../components/EditorTexto.vue'
+import AppHeader from '../components/AppHeader.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -46,8 +48,6 @@ const salvandoVinculo = ref(false)
 const versoes = ref([])
 const carregandoVersoes = ref(false)
 const versoesCarregadas = ref(false)
-// ─── editor texto integral ───────────────────────────────────────────────────
-const editorIntegral = ref(null)
 // ─── upload de anexo ───────────────────────────────────────────────────────
 const inputAnexo = ref(null)
 const uploadandoAnexo = ref(false)
@@ -87,13 +87,6 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-
-  // Popula o editor contenteditable APÓS loading=false (v-else já renderizou)
-  nextTick(() => {
-    if (editorIntegral.value && formVersao.texto_integral) {
-      editorIntegral.value.innerHTML = formVersao.texto_integral
-    }
-  })
 
   // Carrega vínculos e temas em segundo plano (não bloqueia a tela)
   Promise.all([
@@ -322,15 +315,7 @@ const tiposVinculo = [
 
 <template>
   <div class="min-h-screen bg-gray-100">
-    <!-- Header -->
-    <header class="bg-green-900 text-white shadow">
-      <div class="max-w-5xl mx-auto px-6 py-4 flex items-center gap-3">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1M4.22 4.22l.707.707M18.36 18.36l.707.707M1 12h1m20 0h1M4.22 19.78l.707-.707M18.36 5.64l.707-.707M12 7a5 5 0 100 10A5 5 0 0012 7z"/>
-        </svg>
-        <h1 class="text-lg font-semibold tracking-wide">Assembleia Legislativa — Ceará</h1>
-      </div>
-    </header>
+    <AppHeader />
 
     <!-- Loading -->
     <div v-if="loading" class="flex justify-center pt-24">
@@ -398,55 +383,17 @@ const tiposVinculo = [
 
             <div class="mb-4">
               <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Texto Integral da Lei</label>
-              <div class="rounded-lg border border-gray-200 overflow-hidden">
-                <div class="flex gap-1 px-3 py-2 bg-gray-50 border-b border-gray-100">
-                  <button type="button" @mousedown.prevent="document.execCommand('bold')" class="p-1 rounded text-gray-500 hover:bg-gray-200 text-xs font-bold">B</button>
-                  <button type="button" @mousedown.prevent="document.execCommand('italic')" class="p-1 rounded text-gray-500 hover:bg-gray-200 text-xs italic">I</button>
-                  <button type="button" @mousedown.prevent="document.execCommand('underline')" class="p-1 rounded text-gray-500 hover:bg-gray-200 text-xs underline">U</button>
-                  <button type="button" @mousedown.prevent="document.execCommand('strikeThrough')" class="p-1 rounded text-gray-500 hover:bg-gray-200 text-xs line-through">S</button>
-                  <div class="w-px bg-gray-200 mx-1"></div>
-                  <button type="button" @mousedown.prevent="document.execCommand('removeFormat')" class="p-1 rounded text-gray-400 hover:bg-gray-200 text-xs" title="Remover formatação">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                  </button>
-                </div>
-                <div
-                  ref="editorIntegral"
-                  contenteditable="true"
-                  @input="formVersao.texto_integral = $event.target.innerHTML"
-                  class="min-h-[280px] max-h-[480px] overflow-y-auto p-4 text-sm text-gray-700 focus:outline-none leading-relaxed"
-                  style="word-break: break-word;"
-                ></div>
-              </div>
+              <EditorTexto v-model="formVersao.texto_integral" minHeight="280px" />
             </div>
 
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Texto da Lei Alterada</label>
-                <div class="rounded-lg border border-gray-200 p-3 bg-gray-50 min-h-[180px]">
-                  <div class="flex gap-1 mb-2">
-                    <button class="p-1 rounded text-gray-500 hover:bg-gray-200 text-xs font-bold">B</button>
-                    <button class="p-1 rounded text-gray-500 hover:bg-gray-200 text-xs italic">I</button>
-                    <button class="p-1 rounded text-gray-500 hover:bg-gray-200 text-xs line-through">S</button>
-                    <button class="p-1 rounded text-gray-500 hover:bg-gray-200"><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h8"/></svg></button>
-                    <button class="p-1 rounded text-gray-500 hover:bg-gray-200"><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101"/></svg></button>
-                  </div>
-                  <textarea v-model="formVersao.texto_alterado" rows="6" placeholder="Trecho original da lei que foi alterado..."
-                    class="w-full text-sm bg-transparent resize-none focus:outline-none text-gray-700"></textarea>
-                </div>
+                <EditorTexto v-model="formVersao.texto_alterado" minHeight="180px" />
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Texto Consolidado</label>
-                <div class="rounded-lg border border-gray-200 p-3 min-h-[180px]">
-                  <div class="flex gap-1 mb-2">
-                    <button class="p-1 rounded text-gray-500 hover:bg-gray-200 text-xs font-bold">B</button>
-                    <button class="p-1 rounded text-gray-500 hover:bg-gray-200 text-xs italic">I</button>
-                    <button class="p-1 rounded text-gray-500 hover:bg-gray-200 text-xs line-through">S</button>
-                    <button class="p-1 rounded text-gray-500 hover:bg-gray-200"><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h8"/></svg></button>
-                    <button class="p-1 rounded text-gray-500 hover:bg-gray-200"><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101"/></svg></button>
-                  </div>
-                  <textarea v-model="formVersao.texto_consolidado" rows="6" placeholder="Texto com as alterações aplicadas..."
-                    class="w-full text-sm resize-none focus:outline-none text-gray-700"></textarea>
-                </div>
+                <EditorTexto v-model="formVersao.texto_consolidado" minHeight="180px" />
               </div>
             </div>
           </div>

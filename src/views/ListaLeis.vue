@@ -2,7 +2,9 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../services/api.js'
-import { usuario, limparSessao } from '../services/auth.js'
+
+import EditorTexto from '../components/EditorTexto.vue'
+import AppHeader from '../components/AppHeader.vue'
 
 const router = useRouter()
 
@@ -11,14 +13,23 @@ const meta = ref(null)
 const loading = ref(false)
 const erro = ref(null)
 const pagina = ref(1)
+const filtros = reactive({ numero: '', ementa: '', data_inicio: '', data_fim: '' })
+let filtroTimer = null
 
 async function carregar() {
   loading.value = true
   erro.value = null
   try {
-    const data = await api.leis.listar({ page: pagina.value })
+    const params = { page: pagina.value }
+    if (filtros.numero)      params['filter[numero]']      = filtros.numero
+    if (filtros.ementa)      params['filter[ementa]']      = filtros.ementa
+    if (filtros.data_inicio) params['filter[data_inicio]'] = filtros.data_inicio
+    if (filtros.data_fim)    params['filter[data_fim]']    = filtros.data_fim
+    const data = await api.leis.listar(params)
     leis.value = data.data
     meta.value = data.meta ?? null
+    // Carrega contagem de vínculos em paralelo (o endpoint de listagem não retorna vinculos_count)
+    carregarContagemVinculos(leis.value)
   } catch (e) {
     erro.value = e.message
   } finally {
@@ -26,6 +37,26 @@ async function carregar() {
   }
 }
 
+async function carregarContagemVinculos(lista) {
+  await Promise.allSettled(
+    lista.map(async (lei) => {
+      try {
+        const v = await api.vinculos.listar(lei.id_lei)
+        lei.vinculos_lista = Array.isArray(v) ? v : []
+        lei.vinculos_count = lei.vinculos_lista.length
+      } catch {
+        lei.vinculos_lista = []
+        lei.vinculos_count = 0
+      }
+    })
+  )
+  // Força reatividade: substitui o array para o Vue detectar as mutações
+  leis.value = [...leis.value]
+}
+
+watch(filtros, () => {
+  filtroTimer = setTimeout(() => { pagina.value = 1; carregar() }, 400)
+})
 watch(pagina, carregar)
 onMounted(carregar)
 
@@ -39,12 +70,6 @@ function editarLei(id) {
 
 function novoCadastro() {
   router.push({ name: 'cadastro-lei' })
-}
-
-async function logout() {
-  try { await api.auth.logout() } catch {}
-  limparSessao()
-  router.push({ name: 'login' })
 }
 
 // ─── Modal vincular ────────────────────────────────────────────────────────
@@ -72,6 +97,13 @@ const tiposVinculo = [
   { value: 'revoga', label: 'Revoga' },
   { value: 'acrescenta', label: 'Acrescenta' },
 ]
+
+const tipoVinculoConfig = {
+  altera:      { label: 'Altera',      cor: 'bg-blue-100 text-blue-800 border-blue-200' },
+  revoga:      { label: 'Revoga',      cor: 'bg-red-100 text-red-800 border-red-200' },
+  complementa: { label: 'Complementa', cor: 'bg-purple-100 text-purple-800 border-purple-200' },
+  acrescenta:  { label: 'Acrescenta',  cor: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+}
 
 // Extrai blocos de artigos do texto_integral (HTML ou texto puro)
 const artigosOrigemParsed = computed(() => {
@@ -190,6 +222,8 @@ function statusConfig(status) {
       return { label: 'Revisão', warning: true, cls: 'bg-amber-100 text-amber-800 border border-amber-200' }
     case 'rascunho':
       return { label: 'Rascunho', doc: true, cls: 'bg-gray-100 text-gray-500 border border-gray-200' }
+    case 'pendente':
+      return { label: 'Pendente', doc: true, cls: 'bg-yellow-50 text-yellow-700 border border-yellow-200' }
     default:
       return { label: status ?? '—', cls: 'bg-gray-100 text-gray-500 border border-gray-200' }
   }
@@ -197,38 +231,29 @@ function statusConfig(status) {
 
 const paginas = computed(() => {
   if (!meta.value) return []
-  const total = meta.value.last_page
+  const total = parseInt(Array.isArray(meta.value.last_page) ? meta.value.last_page[0] : meta.value.last_page) || 0
   const atual = pagina.value
+  if (!total) return []
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
   if (atual <= 3) return [1, 2, 3, '...', total]
   if (atual >= total - 2) return [1, '...', total - 2, total - 1, total]
   return [1, '...', atual - 1, atual, atual + 1, '...', total]
 })
 
-const from = computed(() => meta.value?.from ?? 0)
-const to   = computed(() => meta.value?.to   ?? 0)
+function safeInt(v) {
+  if (Array.isArray(v)) return Number(v[0]) || 0
+  return Number(v) || 0
+}
+
+const from  = computed(() => safeInt(meta.value?.from))
+const to    = computed(() => safeInt(meta.value?.to))
+const total = computed(() => safeInt(meta.value?.total))
+const lastPage = computed(() => safeInt(meta.value?.last_page))
 </script>
 
 <template>
   <div class="min-h-screen bg-gray-100">
-    <!-- Header -->
-    <header class="bg-green-900 text-white shadow">
-      <div class="max-w-6xl mx-auto px-6 py-4 flex items-center gap-3">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1M4.22 4.22l.707.707M18.36 18.36l.707.707M1 12h1m20 0h1M4.22 19.78l.707-.707M18.36 5.64l.707-.707M12 7a5 5 0 100 10A5 5 0 0012 7z"/>
-        </svg>
-        <h1 class="text-lg font-semibold tracking-wide">Assembleia Legislativa — Ceará</h1>
-        <div class="ml-auto flex items-center gap-3">
-          <span v-if="usuario" class="text-sm text-green-300">{{ usuario.nome }}</span>
-          <button @click="logout" class="flex items-center gap-1.5 text-sm text-green-300 hover:text-white transition">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-            </svg>
-            Sair
-          </button>
-        </div>
-      </div>
-    </header>
+    <AppHeader />
 
     <main class="max-w-6xl mx-auto px-6 py-6">
       <div class="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -261,6 +286,42 @@ const to   = computed(() => meta.value?.to   ?? 0)
           </button>
         </div>
 
+        <!-- Filtros -->
+        <div class="px-5 py-3 border-b border-gray-200 bg-gray-50">
+          <div class="flex flex-wrap gap-3 items-end">
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Número</label>
+              <input v-model="filtros.numero" type="text" placeholder="Ex: 1234"
+                class="w-28 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <div class="flex-1 min-w-[12rem]">
+              <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Ementa</label>
+              <input v-model="filtros.ementa" type="text" placeholder="Buscar por ementa..."
+                class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data início</label>
+              <input v-model="filtros.data_inicio" type="date"
+                class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data fim</label>
+              <input v-model="filtros.data_fim" type="date"
+                class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+            </div>
+            <button
+              v-if="filtros.numero || filtros.ementa || filtros.data_inicio || filtros.data_fim"
+              @click="Object.assign(filtros, { numero: '', ementa: '', data_inicio: '', data_fim: '' })"
+              class="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 border border-gray-300 rounded-lg px-3 py-2 transition self-end"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              Limpar filtros
+            </button>
+          </div>
+        </div>
+
         <!-- Loading -->
         <div v-if="loading" class="flex justify-center py-16">
           <svg class="w-8 h-8 animate-spin text-green-700" fill="none" viewBox="0 0 24 24">
@@ -281,7 +342,7 @@ const to   = computed(() => meta.value?.to   ?? 0)
 
         <template v-else>
           <!-- Cabeçalho da tabela -->
-          <div class="grid grid-cols-[130px_1fr_140px_130px_80px] px-5 py-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide select-none">
+          <div class="grid grid-cols-[130px_1fr_110px_140px_130px_80px] px-5 py-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide select-none">
             <div class="flex items-center gap-1">
               N° / ANO
               <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
@@ -300,6 +361,7 @@ const to   = computed(() => meta.value?.to   ?? 0)
                 <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/>
               </svg>
             </div>
+            <div>VÍNCULOS</div>
             <div>STATUS</div>
             <div>AÇÕES</div>
           </div>
@@ -308,7 +370,7 @@ const to   = computed(() => meta.value?.to   ?? 0)
           <div
             v-for="lei in leis"
             :key="lei.id_lei"
-            class="grid grid-cols-[130px_1fr_140px_130px_80px] px-5 py-4 border-b border-gray-100 hover:bg-gray-50 transition-colors items-start"
+            class="grid grid-cols-[130px_1fr_110px_140px_130px_80px] px-5 py-4 border-b border-gray-100 hover:bg-gray-50 transition-colors items-start"
           >
             <!-- N° / ANO -->
             <div>
@@ -329,20 +391,39 @@ const to   = computed(() => meta.value?.to   ?? 0)
             <!-- MODIFICADO EM -->
             <div class="text-sm text-gray-500 whitespace-pre-line">{{ formatarDataHora(lei.updated_at ?? lei.versao_atual?.data_publicacao) }}</div>
 
+            <!-- VÍNCULOS -->
+            <div class="flex flex-col gap-1 pt-0.5">
+              <template v-if="(lei.vinculos_count ?? 0) > 0">
+                <div
+                  v-for="v in lei.vinculos_lista"
+                  :key="v.id_vinculo ?? v.id_lei_vinculo ?? v.id"
+                  class="flex flex-col gap-0.5"
+                >
+                  <span :class="['inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded border leading-tight w-fit', (tipoVinculoConfig[v.tipo_vinculo]?.cor ?? 'bg-gray-100 text-gray-700 border-gray-200')]">
+                    {{ tipoVinculoConfig[v.tipo_vinculo]?.label ?? v.tipo_vinculo }}
+                  </span>
+                  <span class="text-xs text-gray-600 leading-tight">
+                    Lei nº {{ v.lei_origem?.numero }}/{{ v.lei_origem?.ano }}
+                  </span>
+                </div>
+              </template>
+              <span v-else class="text-xs text-gray-300">—</span>
+            </div>
+
             <!-- STATUS -->
             <div>
               <span
-                :class="statusConfig(lei.status).cls"
+                :class="statusConfig(lei.versao_atual?.status).cls"
                 class="inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1"
               >
-                <span v-if="statusConfig(lei.status).dot" class="w-2 h-2 rounded-full bg-green-500 shrink-0"></span>
-                <svg v-else-if="statusConfig(lei.status).warning" class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <span v-if="statusConfig(lei.versao_atual?.status).dot" class="w-2 h-2 rounded-full bg-green-500 shrink-0"></span>
+                <svg v-else-if="statusConfig(lei.versao_atual?.status).warning" class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                 </svg>
-                <svg v-else-if="statusConfig(lei.status).doc" class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <svg v-else-if="statusConfig(lei.versao_atual?.status).doc" class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
-                {{ statusConfig(lei.status).label }}
+                {{ statusConfig(lei.versao_atual?.status).label }}
               </span>
             </div>
 
@@ -380,40 +461,75 @@ const to   = computed(() => meta.value?.to   ?? 0)
           </div>
 
           <!-- Paginação -->
-          <div class="flex items-center justify-between px-5 py-4 border-t border-gray-100">
-            <p class="text-sm text-gray-500">
-              Exibindo {{ from }} a {{ to }} de {{ meta?.total?.toLocaleString('pt-BR') }} registros
+          <div class="flex items-center justify-between gap-4 px-5 py-3 border-t border-gray-100 bg-white">
+            <!-- Resumo -->
+            <p class="text-sm text-gray-500 whitespace-nowrap shrink-0">
+              <span class="font-medium text-gray-800">{{ from }}–{{ to }}</span>
+              de <span class="font-medium text-gray-800">{{ total.toLocaleString('pt-BR') }}</span>
             </p>
-            <div class="flex items-center gap-1">
+
+            <!-- Controles -->
+            <div class="flex items-center gap-0.5 overflow-x-auto">
+              <!-- Anterior -->
               <button
                 :disabled="pagina <= 1"
                 @click="pagina--"
-                class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 disabled:opacity-30 transition"
+                class="shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30 transition"
+                title="Página anterior"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
                 </svg>
               </button>
-              <template v-for="p in paginas" :key="String(p) + '_' + paginas.indexOf(p)">
-                <span v-if="p === '...'" class="w-8 h-8 flex items-center justify-center text-sm text-gray-400">...</span>
+
+              <!-- Números -->
+              <template v-for="(p, idx) in paginas" :key="idx">
+                <span
+                  v-if="p === '...'"
+                  class="shrink-0 w-7 h-8 flex items-center justify-center text-sm text-gray-300 select-none"
+                >…</span>
                 <button
                   v-else
                   @click="pagina = p"
-                  :class="pagina === p ? 'bg-green-700 text-white' : 'text-gray-600 hover:bg-gray-100'"
-                  class="w-8 h-8 flex items-center justify-center rounded-md text-sm font-medium transition"
+                  :class="pagina === p
+                    ? 'bg-green-700 text-white font-semibold'
+                    : 'text-gray-600 hover:bg-gray-100'"
+                  class="shrink-0 min-w-[2rem] h-8 px-1 flex items-center justify-center rounded-md text-sm transition"
                 >
                   {{ p }}
                 </button>
               </template>
+
+              <!-- Próxima -->
               <button
-                :disabled="pagina >= (meta?.last_page ?? 1)"
+                :disabled="pagina >= lastPage"
                 @click="pagina++"
-                class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 disabled:opacity-30 transition"
+                class="shrink-0 w-8 h-8 flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30 transition"
+                title="Próxima página"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
                 </svg>
               </button>
+
+              <!-- Ir para página -->
+              <template v-if="lastPage > 7">
+                <div class="shrink-0 w-px h-5 bg-gray-200 mx-1"></div>
+                <input
+                  type="number"
+                  :placeholder="String(pagina)"
+                  :min="1"
+                  :max="lastPage"
+                  @keydown.enter="(e) => {
+                    const v = parseInt(e.target.value)
+                    if (v >= 1 && v <= lastPage) pagina = v
+                    e.target.value = ''
+                  }"
+                  class="shrink-0 w-14 h-8 rounded-md border border-gray-200 text-center text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-green-600"
+                  title="Ir para página (Enter)"
+                  style="-moz-appearance:textfield"
+                />
+              </template>
             </div>
           </div>
         </template>
@@ -617,18 +733,14 @@ const to   = computed(() => meta.value?.to   ?? 0)
                         Texto original
                         <span class="text-gray-300 font-normal">(redação anterior)</span>
                       </label>
-                      <textarea v-model="trecho.texto_original" rows="4"
-                        placeholder="Redação que será substituída..."
-                        class="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-green-500 resize-none leading-relaxed"></textarea>
+                      <EditorTexto v-model="trecho.texto_original" minHeight="120px" />
                     </div>
                     <div>
                       <label class="block text-xs text-gray-400 font-medium mb-1">
                         Texto novo
                         <span class="text-gray-300 font-normal">(nova redação)</span>
                       </label>
-                      <textarea v-model="trecho.texto_novo" rows="4"
-                        placeholder="Nova redação introduzida..."
-                        class="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-green-500 resize-none leading-relaxed"></textarea>
+                      <EditorTexto v-model="trecho.texto_novo" minHeight="120px" />
                     </div>
                   </div>
                 </div>

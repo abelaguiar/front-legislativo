@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../services/api.js'
+import AppHeader from '../components/AppHeader.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -9,8 +10,22 @@ const router = useRouter()
 const lei = ref(null)
 const versoes = ref([])
 const versaoSelecionadaId = ref(null)
+const vinculos = ref([])
 const loading = ref(false)
 const erro = ref(null)
+
+const tiposVinculo = {
+  altera: { label: 'Altera', cor: 'bg-blue-100 text-blue-800' },
+  revoga: { label: 'Revoga', cor: 'bg-red-100 text-red-800' },
+  complementa: { label: 'Complementa', cor: 'bg-purple-100 text-purple-800' },
+  acrescenta: { label: 'Acrescenta', cor: 'bg-yellow-100 text-yellow-800' },
+}
+
+const tiposTrecho = {
+  substituicao: 'Substituição',
+  acrescimo: 'Acréscimo',
+  supressao: 'Supressão',
+}
 
 const versaoAtual = computed(() =>
   versoes.value.find(v => v.id_versao_lei === versaoSelecionadaId.value) ?? null
@@ -24,8 +39,8 @@ async function carregar() {
       api.leis.mostrar(route.params.id),
       api.leis.versoes(route.params.id),
     ])
-    lei.value = leiData.data
-    versoes.value = versData.data ?? versData
+    lei.value = leiData
+    versoes.value = versData
     const atual = versoes.value.find(v => v.versao_atual)
     versaoSelecionadaId.value = atual?.id_versao_lei ?? versoes.value[0]?.id_versao_lei ?? null
   } catch (e) {
@@ -33,6 +48,11 @@ async function carregar() {
   } finally {
     loading.value = false
   }
+
+  // Carrega vínculos em background sem bloquear a tela
+  api.vinculos.listar(route.params.id).then(data => {
+    vinculos.value = Array.isArray(data) ? data : []
+  }).catch(() => {})
 }
 
 onMounted(carregar)
@@ -46,17 +66,7 @@ function formatarData(data) {
 
 <template>
   <div class="min-h-screen bg-gray-50">
-    <!-- Header -->
-    <header class="bg-green-800 text-white shadow">
-      <div class="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
-        <button @click="router.back()" class="hover:bg-green-700 rounded p-1 transition">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
-          </svg>
-        </button>
-        <h1 class="text-xl font-bold tracking-wide">Assembleia Legislativa — Ceará</h1>
-      </div>
-    </header>
+    <AppHeader show-back />
 
     <main class="max-w-6xl mx-auto px-4 py-8">
 
@@ -160,7 +170,7 @@ function formatarData(data) {
             </div>
 
             <!-- Texto integral -->
-            <div class="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-5">
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-5 mb-4">
               <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Texto Integral</h3>
               <div
                 v-if="versaoAtual.texto_integral"
@@ -168,6 +178,54 @@ function formatarData(data) {
                 v-html="versaoAtual.texto_integral"
               />
               <p v-else class="text-sm text-gray-400 italic">Texto integral não disponível para esta versão.</p>
+            </div>
+
+            <!-- Vínculos com outras leis -->
+            <div v-if="vinculos.length" class="bg-white rounded-xl border border-gray-200 shadow-sm px-6 py-5">
+              <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Vínculos com outras leis</h3>
+              <div class="space-y-4">
+                <div
+                  v-for="v in vinculos"
+                  :key="v.id_lei_vinculo"
+                  class="border border-gray-100 rounded-lg p-4"
+                >
+                  <div class="flex items-center gap-2 mb-2">
+                    <span :class="['text-xs font-semibold px-2 py-0.5 rounded-full', (tiposVinculo[v.tipo_vinculo]?.cor ?? 'bg-gray-100 text-gray-700')]">
+                      {{ tiposVinculo[v.tipo_vinculo]?.label ?? v.tipo_vinculo }}
+                    </span>
+                    <router-link
+                      v-if="v.lei_origem?.id_lei"
+                      :to="{ name: 'detalhe-lei', params: { id: v.lei_origem.id_lei } }"
+                      class="text-sm font-medium text-green-800 hover:underline"
+                    >
+                      Lei nº {{ v.lei_origem?.numero }}/{{ v.lei_origem?.ano }}
+                    </router-link>
+                    <span v-else class="text-sm font-medium text-gray-700">
+                      Lei nº {{ v.lei_origem?.numero }}/{{ v.lei_origem?.ano }}
+                    </span>
+                  </div>
+
+                  <!-- Trechos modificados -->
+                  <div v-if="v.trechos?.length" class="mt-3 space-y-3">
+                    <div
+                      v-for="t in v.trechos"
+                      :key="t.id_trecho_vinculo ?? t.ordem"
+                      class="text-xs rounded-lg overflow-hidden border border-gray-200"
+                    >
+                      <div class="bg-gray-50 px-3 py-1.5 flex items-center gap-2 border-b border-gray-200">
+                        <span class="font-semibold text-gray-600">{{ tiposTrecho[t.tipo] ?? t.tipo }}</span>
+                        <span v-if="t.referencia" class="text-gray-400">· {{ t.referencia }}</span>
+                      </div>
+                      <div v-if="t.texto_original" class="px-3 py-2 bg-red-50 text-red-800 line-through">
+                        {{ t.texto_original }}
+                      </div>
+                      <div v-if="t.texto_novo" class="px-3 py-2 bg-green-50 text-green-800">
+                        {{ t.texto_novo }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
         </div>

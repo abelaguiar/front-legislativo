@@ -4,6 +4,7 @@ import ListaLeis from '../views/ListaLeis.vue'
 import DetalheLei from '../views/DetalheLei.vue'
 import CadastroLei from '../views/CadastroLei.vue'
 import EdicaoLei from '../views/EdicaoLei.vue'
+import ConsolidacaoLegislativa from '../views/ConsolidacaoLegislativa.vue'
 import Login from '../views/Login.vue'
 
 const routes = [
@@ -12,6 +13,7 @@ const routes = [
   { path: '/leis/novo', name: 'cadastro-lei', component: CadastroLei },
   { path: '/leis/:id/editar', name: 'edicao-lei', component: EdicaoLei },
   { path: '/leis/:id', name: 'detalhe-lei', component: DetalheLei },
+  { path: '/consolidacao', name: 'consolidacao-lei', component: ConsolidacaoLegislativa },
 ]
 
 const router = createRouter({

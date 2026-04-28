@@ -47,12 +47,17 @@ export const api = {
     versao: (leiId, versaoId) => request(`/leis/${leiId}/versoes/${versaoId}`).then(unwrap),
     criarVersao: (leiId, dados) => jsonRequest(`/leis/${leiId}/versoes`, 'POST', dados).then(unwrap),
     atualizarVersao: (leiId, versaoId, dados) => jsonRequest(`/leis/${leiId}/versoes/${versaoId}`, 'PUT', dados).then(unwrap),
+    painelConsolidacao: (leiId, versaoId) => request(`/leis/${leiId}/versoes/${versaoId}/consolidacao`).then(unwrap),
+    analisarAlteradora: (leiId, versaoId, dados) => jsonRequest(`/leis/${leiId}/versoes/${versaoId}/analisar-alteradora`, 'POST', dados).then(unwrap),
+    padronizarVersao: (leiId, versaoId, dados = {}) => jsonRequest(`/leis/${leiId}/versoes/${versaoId}/padronizar-formatacao`, 'POST', dados).then(unwrap),
+    publicarVersao: (leiId, versaoId) => jsonRequest(`/leis/${leiId}/versoes/${versaoId}/publicar`, 'POST', {}).then(unwrap),
   },
   vinculos: {
     listar: (leiId) => request(`/leis/${leiId}/vinculos`).then(res => res?.data ?? res),
     criar: (leiId, dados) => jsonRequest(`/leis/${leiId}/vinculos`, 'POST', dados).then(unwrap),
     remover: (leiId, vinculoId) => request(`/leis/${leiId}/vinculos/${vinculoId}`, { method: 'DELETE' }),
     consolidar: (leiId, versaoId, dados) => jsonRequest(`/leis/${leiId}/versoes/${versaoId}/consolidar`, 'POST', dados).then(unwrap),
+    atualizarTrecho: (leiId, vinculoId, trechoId, dados) => jsonRequest(`/leis/${leiId}/vinculos/${vinculoId}/trechos/${trechoId}`, 'PATCH', dados).then(unwrap),
   },
   anexos: {
     listar: (versaoId) => request(`/versoes/${versaoId}/anexos`).then(res => res?.data ?? res),

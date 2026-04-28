@@ -39,12 +39,23 @@ async function logout() {
       <nav class="ml-8 flex items-center gap-1">
         <RouterLink
           :to="{ name: 'lista-leis' }"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-white bg-green-700 hover:bg-green-600 transition"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-white hover:bg-green-700 transition"
+          active-class="bg-green-700"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
           </svg>
           Leis
+        </RouterLink>
+        <RouterLink
+          :to="{ name: 'consolidacao-lei' }"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-white hover:bg-green-700 transition"
+          active-class="bg-green-700"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h8M8 12h8M8 17h4M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"/>
+          </svg>
+          Consolidação
         </RouterLink>
       </nav>
 
